@@ -19,7 +19,7 @@
 #include "CRC7.h"
 #include "CRC16.h"
 
-SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName cd, const char* name, SwitchType cdtype, int hz) : FATFileSystem(name), m_SPI(mosi, miso, sclk), m_CS(cs, 1), m_CD(cd), m_CD_ASSERT((int)cdtype)
+SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz) : FATFileSystem(name), m_SPI(mosi, miso, sclk), m_CS(cs, 1), m_CD(cd), m_CD_ASSERT((int)cdtype)
 {
     //Initialize the member variables
     m_SpiFreq = hz;

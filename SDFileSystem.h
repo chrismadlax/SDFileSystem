@@ -87,12 +87,12 @@ public:
      * @param miso The SPI data in pin.
      * @param sclk The SPI clock pin.
      * @param cs The SPI chip select pin.
-     * @param cd The card detect pin.
      * @param name The name used to access the virtual filesystem.
+     * @param cd The card detect pin.
      * @param cdtype The type of card detect switch (defaults to SWITCH_NO).
      * @param hz The SPI bus frequency (defaults to 1MHz).
      */
-    SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName cd, const char* name, SwitchType cdtype = SWITCH_NO, int hz = 1000000);
+    SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype = SWITCH_NO, int hz = 1000000);
 
     /** Get the detected SD/MMC card type
      *
