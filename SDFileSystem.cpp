@@ -19,7 +19,7 @@
 #include "CRC7.h"
 #include "CRC16.h"
 
-SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName cd, const char* name, int hz) : FATFileSystem(name), m_SPI(mosi, miso, sclk), m_CS(cs, 1), m_CD(cd)
+SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName cd, const char* name, SwitchType cdtype, int hz) : FATFileSystem(name), m_SPI(mosi, miso, sclk), m_CS(cs, 1), m_CD(cd), m_CD_ASSERT((int)cdtype)
 {
     //Initialize the member variables
     m_SpiFreq = hz;
@@ -31,7 +31,10 @@ SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs,
 
     //Configure the card detect pin
     m_CD.mode(PullUp);
-    m_CD.fall(this, &SDFileSystem::checkSocket);
+    if (cdtype == SWITCH_NO)
+        m_CD.rise(this, &SDFileSystem::checkSocket);
+    else
+        m_CD.fall(this, &SDFileSystem::checkSocket);
 }
 
 SDFileSystem::CardType SDFileSystem::card_type()
@@ -347,7 +350,7 @@ uint64_t SDFileSystem::disk_sectors()
 void SDFileSystem::checkSocket()
 {
     //Check if a card is in the socket
-    if (m_CD) {
+    if (m_CD == m_CD_ASSERT) {
         //The socket is occupied, clear the STA_NODISK flag
         m_Status &= ~STA_NODISK;
     } else {

@@ -64,6 +64,13 @@
 class SDFileSystem : public FATFileSystem
 {
 public:
+    /** Represents the different card detect switch types
+     */
+    enum SwitchType {
+        SWITCH_NO = 0,  /**< Switch shorts to GND when the socket is occupied (normally open) */
+        SWITCH_NC = 1   /**< Switch shorts to GND when the socket is empty (normally closed) */
+    };
+
     /** Represents the different SD/MMC card types
      */
     enum CardType {
@@ -80,11 +87,12 @@ public:
      * @param miso The SPI data in pin.
      * @param sclk The SPI clock pin.
      * @param cs The SPI chip select pin.
-     * @param cd The active-high card detect pin.
+     * @param cd The card detect pin.
      * @param name The name used to access the virtual filesystem.
+     * @param cdtype The type of card detect switch (defaults to SWITCH_NO).
      * @param hz The SPI bus frequency (defaults to 1MHz).
      */
-    SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName cd, const char* name, int hz = 1000000);
+    SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName cd, const char* name, SwitchType cdtype = SWITCH_NO, int hz = 1000000);
 
     /** Get the detected SD/MMC card type
      *
@@ -119,6 +127,7 @@ private:
     SPI m_SPI;
     DigitalOut m_CS;
     InterruptIn m_CD;
+    const int m_CD_ASSERT;
     int m_SpiFreq;
     int m_Status;
     SDFileSystem::CardType m_CardType;
