@@ -93,7 +93,6 @@ int SDFileSystem::disk_initialize()
         resp = writeCommand(CMD58, 0);
         if (resp != 0x01 || !(readReturn() & (1 << 20))) {
             //Initialization failed
-            deselect();
             m_CardType = CARD_UNKNOWN;
             return m_Status;
         }
@@ -128,13 +127,10 @@ int SDFileSystem::disk_initialize()
         }
     } else {
         //Didn't respond or illegal command, this is either an SDCv1 or MMC card
-        deselect();
-
         //Send CMD58(0) to read the OCR, and verify that the card supports 3.2-3.3V
         resp = writeCommand(CMD58, 0);
         if (resp != 0x01 || !(readReturn() & (1 << 20))) {
             //Initialization failed
-            deselect();
             m_CardType = CARD_UNKNOWN;
             return m_Status;
         }
@@ -234,7 +230,6 @@ int SDFileSystem::disk_read(uint8_t* buffer, uint64_t sector)
                 return RES_OK;
         } else {
             //The command failed
-            deselect();
             return RES_ERROR;
         }
     }
@@ -263,7 +258,7 @@ int SDFileSystem::disk_write(const uint8_t* buffer, uint64_t sector)
         if (writeCommand(CMD24, sector) == 0x00) {
             //Wait for up to 500ms for the card to become ready
             if (!waitReady(500)) {
-                //We timed out
+                //We timed out, deselect and loop again
                 deselect();
                 continue;
             }
@@ -291,7 +286,6 @@ int SDFileSystem::disk_write(const uint8_t* buffer, uint64_t sector)
                 return RES_ERROR;
         } else {
             //The command failed
-            deselect();
             return RES_ERROR;
         }
     }
@@ -338,7 +332,6 @@ uint64_t SDFileSystem::disk_sectors()
             }
         } else {
             //The command failed
-            deselect();
             return 0;
         }
     }
@@ -405,14 +398,14 @@ char SDFileSystem::writeCommand(char cmd, unsigned int arg)
 
     //Try to send the command up to 3 times
     for (int i = 0; i < 3; i++) {
-        //Send a CMD55 prior to an ACMD
+        //Send CMD55 prior to an ACMD
         if (cmd == ACMD41) {
             resp = writeCommand(CMD55, 0);
             if (resp > 0x01)
                 return resp;
         }
 
-        //Select the card and wait for ready
+        //Select the card, and wait for ready
         if (!select())
             return 0xFF;
 
@@ -436,11 +429,11 @@ char SDFileSystem::writeCommand(char cmd, unsigned int arg)
                 break;
         }
 
-        //Deselect the card unless there's more data to read/write
-        if (resp == 0xFF || (resp & (1 << 3)) || !(cmd == CMD8 || cmd == CMD9 || cmd == CMD17 || cmd == CMD24 || cmd == CMD55 || cmd == CMD58))
+        //Deselect the card on errors, or if the transaction is finished
+        if (resp > 0x01 || !(cmd == CMD8 || cmd == CMD9 || cmd == CMD17 || cmd == CMD24 || cmd == CMD55 || cmd == CMD58))
             deselect();
 
-        //Return the response if there were no CRC errors
+        //Return the response unless there were CRC errors
         if (resp == 0xFF || !(resp & (1 << 3)))
             return resp;
     }
