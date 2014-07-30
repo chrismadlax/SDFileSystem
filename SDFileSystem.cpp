@@ -411,7 +411,7 @@ char SDFileSystem::writeCommand(char cmd, unsigned int arg)
 
         //Prepare the command packet
         char cmdPacket[6];
-        cmdPacket[0] = 0x40 | cmd;
+        cmdPacket[0] = cmd;
         cmdPacket[1] = arg >> 24;
         cmdPacket[2] = arg >> 16;
         cmdPacket[3] = arg >> 8;
