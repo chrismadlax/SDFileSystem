@@ -112,12 +112,13 @@ private:
     enum Command {
         CMD0 = (0x40 | 0),      /**< GO_IDLE_STATE */
         CMD1 = (0x40 | 1),      /**< SEND_OP_COND */
-        ACMD41 = (0x40 | 41),   /**< APP_SEND_OP_COND */
         CMD8 = (0x40 | 8),      /**< SEND_IF_COND */
         CMD9 = (0x40 | 9),      /**< SEND_CSD */
         CMD16 = (0x40 | 16),    /**< SET_BLOCKLEN */
         CMD17 = (0x40 | 17),    /**< READ_SINGLE_BLOCK */
         CMD24 = (0x40 | 24),    /**< WRITE_BLOCK */
+        ACMD41 = (0x40 | 41),   /**< SD_SEND_OP_COND */
+        ACMD42 = (0x40 | 42),   /**< SET_CLR_CARD_DETECT */
         CMD55 = (0x40 | 55),    /**< APP_CMD */
         CMD58 = (0x40 | 58),    /**< READ_OCR */
         CMD59 = (0x40 | 59)     /**< CRC_ON_OFF */

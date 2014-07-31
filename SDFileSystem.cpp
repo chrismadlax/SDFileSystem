@@ -71,8 +71,8 @@ int SDFileSystem::disk_initialize()
     for (int i = 0; i < 10; i++)
         m_SPI.write(0xFF);
 
-    //Write CMD0(0), and check for a valid response
-    resp = writeCommand(CMD0, 0);
+    //Write CMD0(0x00000000) to reset the card
+    resp = writeCommand(CMD0, 0x00000000);
     if (resp != 0x01) {
         //Initialization failed
         m_CardType = CARD_UNKNOWN;
@@ -89,8 +89,8 @@ int SDFileSystem::disk_initialize()
             return m_Status;
         }
 
-        //Send CMD58(0) to read the OCR, and verify that the card supports 3.2-3.3V
-        resp = writeCommand(CMD58, 0);
+        //Send CMD58(0x00000000) to read the OCR, and verify that the card supports 3.2-3.3V
+        resp = writeCommand(CMD58, 0x00000000);
         if (resp != 0x01 || !(readReturn() & (1 << 20))) {
             //Initialization failed
             m_CardType = CARD_UNKNOWN;
@@ -112,11 +112,11 @@ int SDFileSystem::disk_initialize()
             return m_Status;
         }
 
-        //Send CMD58(0) to read the OCR
-        resp = writeCommand(CMD58, 0);
+        //Send CMD58(0x00000000) to read the OCR
+        resp = writeCommand(CMD58, 0x00000000);
         if (resp == 0x00) {
             //Check the CCS bit to determine if this is a high capacity card
-            if (readReturn() & 0x40000000)
+            if (readReturn() & (1 << 30))
                 m_CardType = CARD_SDHC;
             else
                 m_CardType = CARD_SD;
@@ -127,8 +127,8 @@ int SDFileSystem::disk_initialize()
         }
     } else {
         //Didn't respond or illegal command, this is either an SDCv1 or MMC card
-        //Send CMD58(0) to read the OCR, and verify that the card supports 3.2-3.3V
-        resp = writeCommand(CMD58, 0);
+        //Send CMD58(0x00000000) to read the OCR, and verify that the card supports 3.2-3.3V
+        resp = writeCommand(CMD58, 0x00000000);
         if (resp != 0x01 || !(readReturn() & (1 << 20))) {
             //Initialization failed
             m_CardType = CARD_UNKNOWN;
@@ -179,6 +179,16 @@ int SDFileSystem::disk_initialize()
     //Send CMD16(0x00000200) to force the block size to 512B if necessary
     if (m_CardType != CARD_SDHC) {
         resp = writeCommand(CMD16, 0x00000200);
+        if (resp != 0x00) {
+            //Initialization failed
+            m_CardType = CARD_UNKNOWN;
+            return m_Status;
+        }
+    }
+
+    //Send ACMD42(0x00000000) to disconnect the internal pull-up resistor on /CS if necessary
+    if (m_CardType != CARD_MMC) {
+        resp = writeCommand(ACMD42, 0x00000000);
         if (resp != 0x00) {
             //Initialization failed
             m_CardType = CARD_UNKNOWN;
@@ -312,8 +322,8 @@ uint64_t SDFileSystem::disk_sectors()
 
     //Try to read the CSD register up to 3 times
     for (int i = 0; i < 3; i++) {
-        //Send CMD9(0) to read the CSD register
-        if (writeCommand(CMD9, 0) == 0x00) {
+        //Send CMD9(0x00000000) to read the CSD register
+        if (writeCommand(CMD9, 0x00000000) == 0x00) {
             //Receive the 16B CSD data
             char csd[16];
             if (readData(csd, 16)) {
@@ -398,9 +408,9 @@ char SDFileSystem::writeCommand(char cmd, unsigned int arg)
 
     //Try to send the command up to 3 times
     for (int i = 0; i < 3; i++) {
-        //Send CMD55 prior to an ACMD
-        if (cmd == ACMD41) {
-            resp = writeCommand(CMD55, 0);
+        //Send CMD55(0x00000000) prior to an application specific command
+        if (cmd == ACMD41 || cmd == ACMD42) {
+            resp = writeCommand(CMD55, 0x00000000);
             if (resp > 0x01)
                 return resp;
         }
