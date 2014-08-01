@@ -19,23 +19,23 @@
 #include "CRC7.h"
 #include "CRC16.h"
 
-SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz) : FATFileSystem(name), m_SPI(mosi, miso, sclk), m_CS(cs, 1), m_CD(cd), m_CD_ASSERT((int)cdtype), m_FREQ(hz)
+SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz) : FATFileSystem(name), m_Spi(mosi, miso, sclk), m_Cs(cs, 1), m_Cd(cd), m_CD_ASSERT((int)cdtype), m_FREQ(hz)
 {
     //Initialize the member variables
     m_CardType = CARD_NONE;
-    m_CrcEnabled = true;
+    m_Crc = true;
     m_LargeFrames = false;
     m_Status = STA_NOINIT;
 
     //Configure the SPI bus
-    m_SPI.format(8, 0);
+    m_Spi.format(8, 0);
 
     //Configure the card detect pin
-    m_CD.mode(PullUp);
+    m_Cd.mode(PullUp);
     if (cdtype == SWITCH_NO)
-        m_CD.rise(this, &SDFileSystem::checkSocket);
+        m_Cd.rise(this, &SDFileSystem::checkSocket);
     else
-        m_CD.fall(this, &SDFileSystem::checkSocket);
+        m_Cd.fall(this, &SDFileSystem::checkSocket);
 }
 
 SDFileSystem::CardType SDFileSystem::card_type()
@@ -51,32 +51,32 @@ SDFileSystem::CardType SDFileSystem::card_type()
     return m_CardType;
 }
 
-bool SDFileSystem::crc_enabled()
+bool SDFileSystem::crc()
 {
     //Return whether or not CRC is enabled
-    return m_CrcEnabled;
+    return m_Crc;
 }
 
-void SDFileSystem::crc_enabled(bool enabled)
+void SDFileSystem::crc(bool enabled)
 {
     //Check the card socket
     checkSocket();
 
     //Just update the member variable if the card isn't initialized
     if (m_Status & STA_NOINIT) {
-        m_CrcEnabled = enabled;
+        m_Crc = enabled;
         return;
     }
 
     //Enable or disable CRC
-    if (!m_CrcEnabled && enabled) {
+    if (enabled && !m_Crc) {
         //Send CMD59(0x00000001) to enable CRC
+        m_Crc = true;
         writeCommand(CMD59, 0x00000001);
-        m_CrcEnabled = true;
-    } else if (m_CrcEnabled && !enabled) {
+    } else if (!enabled && m_Crc) {
         //Send CMD59(0x00000000) to disable CRC
         writeCommand(CMD59, 0x00000000);
-        m_CrcEnabled = false;
+        m_Crc = false;
     }
 }
 
@@ -106,12 +106,12 @@ int SDFileSystem::disk_initialize()
         return m_Status;
 
     //Set the SPI frequency to 100kHz for initialization
-    m_SPI.frequency(100000);
+    m_Spi.frequency(100000);
 
     //Send 80 dummy clocks with /CS and DI held high
-    m_CS = 1;
+    m_Cs = 1;
     for (int i = 0; i < 10; i++)
-        m_SPI.write(0xFF);
+        m_Spi.write(0xFF);
 
     //Write CMD0(0x00000000) to reset the card
     resp = writeCommand(CMD0, 0x00000000);
@@ -211,7 +211,7 @@ int SDFileSystem::disk_initialize()
     }
 
     //Send CMD59(0x00000001) to enable CRC if necessary
-    if (m_CrcEnabled) {
+    if (m_Crc) {
         resp = writeCommand(CMD59, 0x00000001);
         if (resp != 0x00) {
             //Initialization failed
@@ -245,11 +245,11 @@ int SDFileSystem::disk_initialize()
 
     //Increase the SPI frequency to full speed (limited to 20MHz for MMC, or 25MHz for SDC)
     if (m_CardType == CARD_MMC && m_FREQ > 20000000)
-        m_SPI.frequency(20000000);
+        m_Spi.frequency(20000000);
     else if (m_FREQ > 25000000)
-        m_SPI.frequency(25000000);
+        m_Spi.frequency(25000000);
     else
-        m_SPI.frequency(m_FREQ);
+        m_Spi.frequency(m_FREQ);
 
     //Return the device status
     return m_Status;
@@ -318,36 +318,36 @@ int SDFileSystem::disk_write(const uint8_t* buffer, uint64_t sector)
             }
 
             //Send the write data token
-            m_SPI.write(0xFE);
+            m_Spi.write(0xFE);
 
             //Check if large frames are enabled or not
             if (m_LargeFrames) {
                 //Switch to 16-bit frames for better performance
-                m_SPI.format(16, 0);
+                m_Spi.format(16, 0);
 
                 //Write the data block from the buffer
                 for (int b = 0; b < 512; b += 2) {
-                    m_SPI.write((buffer[b] << 8) | buffer[b + 1]);
+                    m_Spi.write((buffer[b] << 8) | buffer[b + 1]);
                 }
 
                 //Calculate the CRC16 checksum for the data block and send it (if enabled)
-                m_SPI.write(m_CrcEnabled ? CRC16((char*)buffer, 512) : 0xFFFF);
+                m_Spi.write(m_Crc ? CRC16((char*)buffer, 512) : 0xFFFF);
 
                 //Switch back to 8-bit frames
-                m_SPI.format(8, 0);
+                m_Spi.format(8, 0);
             } else {
                 //Write the data block from the buffer
                 for (int b = 0; b < 512; b++)
-                    m_SPI.write(buffer[b]);
+                    m_Spi.write(buffer[b]);
 
                 //Calculate the CRC16 checksum for the data block and send it (if enabled)
-                unsigned short crc = m_CrcEnabled ? CRC16((char*)buffer, 512) : 0xFFFF;
-                m_SPI.write(crc >> 8);
-                m_SPI.write(crc);
+                unsigned short crc = m_Crc ? CRC16((char*)buffer, 512) : 0xFFFF;
+                m_Spi.write(crc >> 8);
+                m_Spi.write(crc);
             }
 
             //Receive the data response, and deselect the card
-            char resp = m_SPI.write(0xFF) & 0x1F;
+            char resp = m_Spi.write(0xFF) & 0x1F;
             deselect();
 
             //Check the response
@@ -414,7 +414,7 @@ uint64_t SDFileSystem::disk_sectors()
 void SDFileSystem::checkSocket()
 {
     //Check if a card is in the socket
-    if (m_CD == m_CD_ASSERT) {
+    if (m_Cd == m_CD_ASSERT) {
         //The socket is occupied, clear the STA_NODISK flag
         m_Status &= ~STA_NODISK;
     } else {
@@ -428,7 +428,7 @@ inline bool SDFileSystem::waitReady(int timeout)
 {
     //Wait for the specified timeout for the card to become ready
     for (int i = 0; i < timeout; i++) {
-        if (m_SPI.write(0xFF) == 0xFF)
+        if (m_Spi.write(0xFF) == 0xFF)
             return true;
         wait_ms(1);
     }
@@ -440,10 +440,10 @@ inline bool SDFileSystem::waitReady(int timeout)
 inline bool SDFileSystem::select()
 {
     //Pull /CS low
-    m_CS = 0;
+    m_Cs = 0;
 
     //Send a dummy clock to enable DO
-    m_SPI.write(0xFF);
+    m_Spi.write(0xFF);
 
     //Wait for up to 500ms for the card to become ready
     if (waitReady(500))
@@ -457,10 +457,10 @@ inline bool SDFileSystem::select()
 inline void SDFileSystem::deselect()
 {
     //Pull /CS high
-    m_CS = 1;
+    m_Cs = 1;
 
     //Send a dummy byte to release DO
-    m_SPI.write(0xFF);
+    m_Spi.write(0xFF);
 }
 
 char SDFileSystem::writeCommand(char cmd, unsigned int arg)
@@ -487,18 +487,18 @@ char SDFileSystem::writeCommand(char cmd, unsigned int arg)
         cmdPacket[2] = arg >> 16;
         cmdPacket[3] = arg >> 8;
         cmdPacket[4] = arg;
-        if (m_CrcEnabled || cmd == CMD0 || cmd == CMD8)
+        if (m_Crc || cmd == CMD0 || cmd == CMD8)
             cmdPacket[5] = (CRC7(cmdPacket, 5) << 1) | 0x01;
         else
             cmdPacket[5] = 0x01;
 
         //Send the command packet
         for (int b = 0; b < 6; b++)
-            m_SPI.write(cmdPacket[b]);
+            m_Spi.write(cmdPacket[b]);
 
         //Allow up to 10 bytes of delay for the command response
         for (int b = 0; b < 10; b++) {
-            resp = m_SPI.write(0xFF);
+            resp = m_Spi.write(0xFF);
             if (!(resp & 0x80))
                 break;
         }
@@ -521,10 +521,10 @@ unsigned int SDFileSystem::readReturn()
     unsigned int ret;
 
     //Read the 32-bit response value
-    ret = (m_SPI.write(0xFF) << 24);
-    ret |= (m_SPI.write(0xFF) << 16);
-    ret |= (m_SPI.write(0xFF) << 8);
-    ret |= m_SPI.write(0xFF);
+    ret = (m_Spi.write(0xFF) << 24);
+    ret |= (m_Spi.write(0xFF) << 16);
+    ret |= (m_Spi.write(0xFF) << 8);
+    ret |= m_Spi.write(0xFF);
 
     //Deselect the card
     deselect();
@@ -540,7 +540,7 @@ bool SDFileSystem::readData(char* buffer, int length)
 
     //Wait for up to 200ms for the DataStart token to arrive
     for (int i = 0; i < 200; i++) {
-        token = m_SPI.write(0xFF);
+        token = m_Spi.write(0xFF);
         if (token != 0xFF)
             break;
         wait_ms(1);
@@ -555,34 +555,34 @@ bool SDFileSystem::readData(char* buffer, int length)
     //Check if large frames are enabled or not
     if (m_LargeFrames) {
         //Switch to 16-bit frames for better performance
-        m_SPI.format(16, 0);
+        m_Spi.format(16, 0);
 
         //Read the data into the buffer
         unsigned short dataWord;
         for (int i = 0; i < length; i += 2) {
-            dataWord = m_SPI.write(0xFFFF);
+            dataWord = m_Spi.write(0xFFFF);
             buffer[i] = dataWord >> 8;
             buffer[i + 1] = dataWord;
         }
 
         //Read the CRC16 checksum for the data block
-        crc = m_SPI.write(0xFFFF);
+        crc = m_Spi.write(0xFFFF);
 
         //Switch back to 8-bit frames
-        m_SPI.format(8, 0);
+        m_Spi.format(8, 0);
     } else {
         //Read the data into the buffer
         for (int i = 0; i < length; i++)
-            buffer[i] = m_SPI.write(0xFF);
+            buffer[i] = m_Spi.write(0xFF);
 
         //Read the CRC16 checksum for the data block
-        crc = (m_SPI.write(0xFF) << 8);
-        crc |= m_SPI.write(0xFF);
+        crc = (m_Spi.write(0xFF) << 8);
+        crc |= m_Spi.write(0xFF);
     }
 
     //Deselect the card
     deselect();
 
     //Verify the CRC16 checksum (if enabled)
-    return (!m_CrcEnabled || crc == CRC16(buffer, length));
+    return (!m_Crc || crc == CRC16(buffer, length));
 }

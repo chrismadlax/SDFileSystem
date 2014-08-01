@@ -106,13 +106,13 @@ public:
      *   'true' if CRC is enabled for commands and data,
      *   'false' if CRC is disabled for commands and data.
      */
-    bool crc_enabled();
+    bool crc();
 
     /** Set whether or not CRC is enabled for commands and data
      *
      * @param enabled Whether or not to enable CRC for commands and data.
      */
-    void crc_enabled(bool enabled);
+    void crc(bool enabled);
 
     /** Get whether or not 16-bit frames are enabled for data read/write operations
      *
@@ -153,13 +153,13 @@ private:
     };
 
     //Member variables
-    SPI m_SPI;
-    DigitalOut m_CS;
-    InterruptIn m_CD;
+    SPI m_Spi;
+    DigitalOut m_Cs;
+    InterruptIn m_Cd;
     const int m_CD_ASSERT;
     const int m_FREQ;
     SDFileSystem::CardType m_CardType;
-    bool m_CrcEnabled;
+    bool m_Crc;
     bool m_LargeFrames;
     int m_Status;
 
