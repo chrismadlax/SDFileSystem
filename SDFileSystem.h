@@ -30,7 +30,7 @@
  * #include "SDFileSystem.h"
  *
  * //Create an SDFileSystem object
- * SDFileSystem sd(p5, p6, p7, p19, p20, "sd")
+ * SDFileSystem sd(p5, p6, p7, p20, "sd", p22)
  *
  * int main()
  * {
@@ -100,6 +100,34 @@ public:
      */
     SDFileSystem::CardType card_type();
 
+    /** Get whether or not CRC is enabled for commands and data
+     *
+     * @returns
+     *   'true' if CRC is enabled for commands and data,
+     *   'false' if CRC is disabled for commands and data.
+     */
+    bool crc_enabled();
+
+    /** Set whether or not CRC is enabled for commands and data
+     *
+     * @param enabled Whether or not to enable CRC for commands and data.
+     */
+    void crc_enabled(bool enabled);
+
+    /** Get whether or not 16-bit frames are enabled for data read/write operations
+     *
+     * @returns
+     *   'true' if 16-bit frames will be used during data read/write operations,
+     *   'false' if 8-bit frames will be used during data read/write operations.
+     */
+    bool large_frames();
+
+    /** Set whether or not 16-bit frames are enabled for data read/write operations
+     *
+     * @param enabled Whether or not 16-bit frames are enabled for data read/write operations.
+     */
+    void large_frames(bool enabled);
+
     virtual int disk_initialize();
     virtual int disk_status();
     virtual int disk_read(uint8_t* buffer, uint64_t sector);
@@ -129,9 +157,11 @@ private:
     DigitalOut m_CS;
     InterruptIn m_CD;
     const int m_CD_ASSERT;
-    int m_SpiFreq;
-    int m_Status;
+    const int m_FREQ;
     SDFileSystem::CardType m_CardType;
+    bool m_CrcEnabled;
+    bool m_LargeFrames;
+    int m_Status;
 
     //Internal methods
     void checkSocket();
