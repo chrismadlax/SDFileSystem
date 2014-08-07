@@ -277,8 +277,7 @@ int SDFileSystem::disk_read(uint8_t* buffer, uint64_t sector)
     //Try to read the block up to 3 times
     for (int i = 0; i < 3; i++) {
         //Send CMD17(sector) to read a single block
-        char resp = writeCommand(CMD17, sector);
-        if (resp == 0x00) {
+        if (writeCommand(CMD17, sector) == 0x00) {
             //Try to read the sector, and return if successful
             if (readData((char*)buffer, 512))
                 return RES_OK;
