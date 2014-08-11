@@ -171,6 +171,7 @@ private:
     char writeCommand(char cmd, unsigned int arg);
     unsigned int readReturn();
     bool readData(char* buffer, int length);
+    bool writeData(char* buffer);
 };
 
 #endif

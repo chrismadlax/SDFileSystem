@@ -105,8 +105,8 @@ int SDFileSystem::disk_initialize()
     if (!(m_Status & STA_NOINIT))
         return m_Status;
 
-    //Set the SPI frequency to 100kHz for initialization
-    m_Spi.frequency(100000);
+    //Set the SPI frequency to 400kHz for initialization
+    m_Spi.frequency(400000);
 
     //Send 80 dummy clocks with /CS and DI held high
     m_Cs = 1;
@@ -251,7 +251,7 @@ int SDFileSystem::disk_initialize()
     else
         m_Spi.frequency(m_FREQ);
 
-    //Return the device status
+    //Return the disk status
     return m_Status;
 }
 
@@ -260,13 +260,13 @@ int SDFileSystem::disk_status()
     //Check if there's a card in the socket
     checkSocket();
 
-    //Return the device status
+    //Return the disk status
     return m_Status;
 }
 
 int SDFileSystem::disk_read(uint8_t* buffer, uint64_t sector)
 {
-    //Make sure the device is initialized before proceeding
+    //Make sure the card is initialized before proceeding
     if (m_Status & STA_NOINIT)
         return RES_NOTRDY;
 
@@ -287,17 +287,17 @@ int SDFileSystem::disk_read(uint8_t* buffer, uint64_t sector)
         }
     }
 
-    //The read operation failed 3 times (CRC most likely)
+    //The read operation failed 3 times
     return RES_ERROR;
 }
 
 int SDFileSystem::disk_write(const uint8_t* buffer, uint64_t sector)
 {
-    //Make sure the device is initialized before proceeding
+    //Make sure the card is initialized before proceeding
     if (m_Status & STA_NOINIT)
         return RES_NOTRDY;
 
-    //Make sure the device isn't write protected before proceeding
+    //Make sure the card isn't write protected before proceeding
     if (m_Status & STA_PROTECT)
         return RES_WRPRT;
 
@@ -309,58 +309,16 @@ int SDFileSystem::disk_write(const uint8_t* buffer, uint64_t sector)
     for (int i = 0; i < 3; i++) {
         //Send CMD24(sector) to write a single block
         if (writeCommand(CMD24, sector) == 0x00) {
-            //Wait for up to 500ms for the card to become ready
-            if (!waitReady(500)) {
-                //We timed out, deselect and loop again
-                deselect();
-                continue;
-            }
-
-            //Send the write data token
-            m_Spi.write(0xFE);
-
-            //Check if large frames are enabled or not
-            if (m_LargeFrames) {
-                //Switch to 16-bit frames for better performance
-                m_Spi.format(16, 0);
-
-                //Write the data block from the buffer
-                for (int b = 0; b < 512; b += 2) {
-                    m_Spi.write((buffer[b] << 8) | buffer[b + 1]);
-                }
-
-                //Calculate the CRC16 checksum for the data block and send it (if enabled)
-                m_Spi.write(m_Crc ? CRC16((char*)buffer, 512) : 0xFFFF);
-
-                //Switch back to 8-bit frames
-                m_Spi.format(8, 0);
-            } else {
-                //Write the data block from the buffer
-                for (int b = 0; b < 512; b++)
-                    m_Spi.write(buffer[b]);
-
-                //Calculate the CRC16 checksum for the data block and send it (if enabled)
-                unsigned short crc = m_Crc ? CRC16((char*)buffer, 512) : 0xFFFF;
-                m_Spi.write(crc >> 8);
-                m_Spi.write(crc);
-            }
-
-            //Receive the data response, and deselect the card
-            char resp = m_Spi.write(0xFF) & 0x1F;
-            deselect();
-
-            //Check the response
-            if (resp == 0x05)
+            //Try to write the sector, and return if successful
+            if (writeData((char*)buffer))
                 return RES_OK;
-            else if (resp == 0x0D)
-                return RES_ERROR;
         } else {
             //The command failed
             return RES_ERROR;
         }
     }
 
-    //The operation either timed out 3 times, failed the CRC check 3 times, or experienced a write error
+    //The write operation failed 3 times
     return RES_ERROR;
 }
 
@@ -376,7 +334,7 @@ int SDFileSystem::disk_sync()
 
 uint64_t SDFileSystem::disk_sectors()
 {
-    //Make sure the device is initialized before proceeding
+    //Make sure the card is initialized before proceeding
     if (m_Status & STA_NOINIT)
         return 0;
 
@@ -406,7 +364,7 @@ uint64_t SDFileSystem::disk_sectors()
         }
     }
 
-    //The read operation failed 3 times (CRC most likely)
+    //The read operation failed 3 times
     return 0;
 }
 
@@ -441,16 +399,17 @@ inline bool SDFileSystem::select()
     //Pull /CS low
     m_Cs = 0;
 
-    //Send a dummy clock to enable DO
+    //Send 8 dummy clocks with DI held high to enable DO
     m_Spi.write(0xFF);
 
     //Wait for up to 500ms for the card to become ready
-    if (waitReady(500))
+    if (waitReady(500)) {
         return true;
-
-    //We timed out, deselect and return false
-    deselect();
-    return false;
+    } else {
+        //We timed out, deselect and return false
+        deselect();
+        return false;
+    }
 }
 
 inline void SDFileSystem::deselect()
@@ -458,7 +417,7 @@ inline void SDFileSystem::deselect()
     //Pull /CS high
     m_Cs = 1;
 
-    //Send a dummy byte to release DO
+    //Send 8 dummy clocks with DI held high to disable DO (will also initiate any internal write process)
     m_Spi.write(0xFF);
 }
 
@@ -495,8 +454,8 @@ char SDFileSystem::writeCommand(char cmd, unsigned int arg)
         for (int b = 0; b < 6; b++)
             m_Spi.write(cmdPacket[b]);
 
-        //Allow up to 10 bytes of delay for the command response
-        for (int b = 0; b < 10; b++) {
+        //Allow up to 8 bytes of delay for the command response
+        for (int b = 0; b < 9; b++) {
             resp = m_Spi.write(0xFF);
             if (!(resp & 0x80))
                 break;
@@ -506,12 +465,12 @@ char SDFileSystem::writeCommand(char cmd, unsigned int arg)
         if (resp > 0x01 || !(cmd == CMD8 || cmd == CMD9 || cmd == CMD17 || cmd == CMD24 || cmd == CMD55 || cmd == CMD58))
             deselect();
 
-        //Return the response unless there were CRC errors
+        //Return the response unless there was a CRC error
         if (resp == 0xFF || !(resp & (1 << 3)))
             return resp;
     }
 
-    //The command failed 3 times due to CRC errors
+    //The command failed 3 times
     return 0xFF;
 }
 
@@ -537,7 +496,7 @@ bool SDFileSystem::readData(char* buffer, int length)
     char token;
     unsigned short crc;
 
-    //Wait for up to 200ms for the DataStart token to arrive
+    //Wait for up to 200ms for the data token to arrive
     for (int i = 0; i < 200; i++) {
         token = m_Spi.write(0xFF);
         if (token != 0xFF)
@@ -556,7 +515,7 @@ bool SDFileSystem::readData(char* buffer, int length)
         //Switch to 16-bit frames for better performance
         m_Spi.format(16, 0);
 
-        //Read the data into the buffer
+        //Read the data block into the buffer
         unsigned short dataWord;
         for (int i = 0; i < length; i += 2) {
             dataWord = m_Spi.write(0xFFFF);
@@ -582,6 +541,56 @@ bool SDFileSystem::readData(char* buffer, int length)
     //Deselect the card
     deselect();
 
-    //Verify the CRC16 checksum (if enabled)
+    //Return the validity of the CRC16 checksum (if enabled)
     return (!m_Crc || crc == CRC16(buffer, length));
+}
+
+bool SDFileSystem::writeData(char* buffer)
+{
+    //Wait for up to 500ms for the card to become ready
+    if (!waitReady(500)) {
+        //We timed out, deselect and indicate failure
+        deselect();
+        return false;
+    }
+
+    //Send the data token
+    m_Spi.write(0xFE);
+
+    //Calculate the CRC16 checksum for the data block (if enabled)
+    unsigned short crc = (m_Crc) ? CRC16(buffer, 512) : 0xFFFF;
+
+    //Check if large frames are enabled or not
+    if (m_LargeFrames) {
+        //Switch to 16-bit frames for better performance
+        m_Spi.format(16, 0);
+
+        //Write the data block from the buffer
+        for (int b = 0; b < 512; b += 2) {
+            m_Spi.write((buffer[b] << 8) | buffer[b + 1]);
+        }
+
+        //Send the CRC16 checksum for the data block
+        m_Spi.write(crc);
+
+        //Switch back to 8-bit frames
+        m_Spi.format(8, 0);
+    } else {
+        //Write the data block from the buffer
+        for (int b = 0; b < 512; b++)
+            m_Spi.write(buffer[b]);
+
+        //Send the CRC16 checksum for the data block
+        m_Spi.write(crc >> 8);
+        m_Spi.write(crc);
+    }
+
+    //Receive the data response
+    char resp = m_Spi.write(0xFF);
+
+    //Deselect the card (this will initiate the internal write process)
+    deselect();
+
+    //Return success/failure
+    return ((resp & 0x1F) == 0x05);
 }
