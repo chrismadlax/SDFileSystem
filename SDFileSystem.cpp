@@ -108,7 +108,7 @@ int SDFileSystem::disk_initialize()
     //Set the SPI frequency to 400kHz for initialization
     m_Spi.frequency(400000);
 
-    //Send 80 dummy clocks with /CS and DI held high
+    //Send 80 dummy clocks with /CS deasserted and DI held high
     m_Cs = 1;
     for (int i = 0; i < 10; i++)
         m_Spi.write(0xFF);
@@ -230,7 +230,7 @@ int SDFileSystem::disk_initialize()
         }
     }
 
-    //Send ACMD42(0x00000000) to disconnect the internal pull-up resistor on /CS if necessary
+    //Send ACMD42(0x00000000) to disconnect the internal pull-up resistor on pin 1 if necessary
     if (m_CardType != CARD_MMC) {
         resp = writeCommand(ACMD42, 0x00000000);
         if (resp != 0x00) {
@@ -325,11 +325,12 @@ int SDFileSystem::disk_write(const uint8_t* buffer, uint64_t sector)
 int SDFileSystem::disk_sync()
 {
     //Select the card so we're forced to wait for the end of any internal write processes
-    bool ret = select();
-    deselect();
-
-    //Return success/failure
-    return (ret) ? RES_OK : RES_ERROR;
+    if (select()) {
+        deselect();
+        return RES_OK;
+    } else {
+        return RES_ERROR;
+    }
 }
 
 uint64_t SDFileSystem::disk_sectors()
@@ -347,15 +348,15 @@ uint64_t SDFileSystem::disk_sectors()
             if (readData(csd, 16)) {
                 //Calculate the sector count based on the card type
                 if ((csd[0] >> 6) == 0x01) {
-                    //Calculate the sector count a high capacity card
-                    uint64_t sectors = (((csd[7] & 0x3F) << 16) | (csd[8] << 8) | csd[9]) + 1;
-                    return sectors << 10;
+                    //Calculate the sector count for a high capacity card
+                    uint64_t size = (((csd[7] & 0x3F) << 16) | (csd[8] << 8) | csd[9]) + 1;
+                    return size << 10;
                 } else {
-                    //Calculate the sector count standard capacity card
-                    uint64_t sectors = (((csd[6] & 0x03) << 10) | (csd[7] << 2) | ((csd[8] & 0xC0) >> 6)) + 1;
-                    sectors <<= ((((csd[9] & 0x03) << 1) | ((csd[10] & 0x80) >> 7)) + 2);
-                    sectors <<= (csd[5] & 0x0F);
-                    return sectors >> 9;
+                    //Calculate the sector count for a standard capacity card
+                    uint64_t size = (((csd[6] & 0x03) << 10) | (csd[7] << 2) | ((csd[8] & 0xC0) >> 6)) + 1;
+                    size <<= ((((csd[9] & 0x03) << 1) | ((csd[10] & 0x80) >> 7)) + 2);
+                    size <<= (csd[5] & 0x0F);
+                    return size >> 9;
                 }
             }
         } else {
@@ -396,7 +397,7 @@ inline bool SDFileSystem::waitReady(int timeout)
 
 inline bool SDFileSystem::select()
 {
-    //Pull /CS low
+    //Assert /CS
     m_Cs = 0;
 
     //Send 8 dummy clocks with DI held high to enable DO
@@ -414,7 +415,7 @@ inline bool SDFileSystem::select()
 
 inline void SDFileSystem::deselect()
 {
-    //Pull /CS high
+    //Deassert /CS
     m_Cs = 1;
 
     //Send 8 dummy clocks with DI held high to disable DO (will also initiate any internal write process)
@@ -545,7 +546,7 @@ bool SDFileSystem::readData(char* buffer, int length)
     return (!m_Crc || crc == CRC16(buffer, length));
 }
 
-bool SDFileSystem::writeData(char* buffer)
+bool SDFileSystem::writeData(const char* buffer)
 {
     //Wait for up to 500ms for the card to become ready
     if (!waitReady(500)) {
@@ -566,9 +567,8 @@ bool SDFileSystem::writeData(char* buffer)
         m_Spi.format(16, 0);
 
         //Write the data block from the buffer
-        for (int b = 0; b < 512; b += 2) {
+        for (int b = 0; b < 512; b += 2)
             m_Spi.write((buffer[b] << 8) | buffer[b + 1]);
-        }
 
         //Send the CRC16 checksum for the data block
         m_Spi.write(crc);
