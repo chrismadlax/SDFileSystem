@@ -128,10 +128,11 @@ public:
      */
     void large_frames(bool enabled);
 
+    virtual int unmount();
     virtual int disk_initialize();
     virtual int disk_status();
-    virtual int disk_read(uint8_t* buffer, uint64_t sector);
-    virtual int disk_write(const uint8_t* buffer, uint64_t sector);
+    virtual int disk_read(uint8_t* buffer, uint64_t sector, uint8_t count);
+    virtual int disk_write(const uint8_t* buffer, uint64_t sector, uint8_t count);
     virtual int disk_sync();
     virtual uint64_t disk_sectors();
 
@@ -142,9 +143,15 @@ private:
         CMD1 = (0x40 | 1),      /**< SEND_OP_COND */
         CMD8 = (0x40 | 8),      /**< SEND_IF_COND */
         CMD9 = (0x40 | 9),      /**< SEND_CSD */
+        CMD12 = (0x40 | 12),    /**< STOP_TRANSMISSION */
+        CMD13 = (0x40 | 13),    /**< SEND_STATUS */
         CMD16 = (0x40 | 16),    /**< SET_BLOCKLEN */
         CMD17 = (0x40 | 17),    /**< READ_SINGLE_BLOCK */
+        CMD18 = (0x40 | 18),    /**< READ_MULTIPLE_BLOCK */
+        ACMD22 = (0x40 | 22),   /**< SEND_NUM_WR_BLOCKS */
+        ACMD23 = (0x40 | 23),   /**< SET_WR_BLK_ERASE_COUNT */
         CMD24 = (0x40 | 24),    /**< WRITE_BLOCK */
+        CMD25 = (0x40 | 25),    /**< WRITE_MULTIPLE_BLOCK */
         ACMD41 = (0x40 | 41),   /**< SD_SEND_OP_COND */
         ACMD42 = (0x40 | 42),   /**< SET_CLR_CARD_DETECT */
         CMD55 = (0x40 | 55),    /**< APP_CMD */
@@ -168,10 +175,14 @@ private:
     bool waitReady(int timeout);
     bool select();
     void deselect();
-    char writeCommand(char cmd, unsigned int arg);
-    unsigned int readReturn();
+    char commandTransaction(char cmd, unsigned int arg, unsigned int* resp = NULL);
+    char command(char cmd, unsigned int arg, unsigned int* resp = NULL);
     bool readData(char* buffer, int length);
-    bool writeData(const char* buffer);
+    char writeData(const char* buffer, char token);
+    bool readBlock(char* buffer, unsigned long long lba);
+    bool readBlocks(char* buffer, unsigned long long lba, int count);
+    bool writeBlock(const char* buffer, unsigned long long lba);
+    bool writeBlocks(const char* buffer, unsigned long long lba, int count);
 };
 
 #endif
