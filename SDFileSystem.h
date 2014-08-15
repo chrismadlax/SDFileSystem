@@ -30,7 +30,7 @@
  * #include "SDFileSystem.h"
  *
  * //Create an SDFileSystem object
- * SDFileSystem sd(p5, p6, p7, p20, "sd", p22)
+ * SDFileSystem sd(p5, p6, p7, p20, "sd", p22, SDFileSystem::SWITCH_NEG_NO);
  *
  * int main()
  * {
@@ -67,8 +67,10 @@ public:
     /** Represents the different card detect switch types
      */
     enum SwitchType {
-        SWITCH_NO = 0,  /**< Switch shorts to GND when the socket is occupied (normally open) */
-        SWITCH_NC = 1   /**< Switch shorts to GND when the socket is empty (normally closed) */
+        SWITCH_POS_NO,  /**< Switch shorts to VDD when the socket is occupied (positive logic, normally open) */
+        SWITCH_POS_NC,  /**< Switch shorts to VDD when the socket is empty (positive logic, normally closed) */
+        SWITCH_NEG_NO,  /**< Switch shorts to GND when the socket is occupied (negative logic, normally open) */
+        SWITCH_NEG_NC   /**< Switch shorts to GND when the socket is empty (negative logic, normally closed) */
     };
 
     /** Represents the different SD/MMC card types
@@ -89,10 +91,10 @@ public:
      * @param cs The SPI chip select pin.
      * @param name The name used to access the virtual filesystem.
      * @param cd The card detect pin.
-     * @param cdtype The type of card detect switch (defaults to SWITCH_NO).
+     * @param cdtype The type of card detect switch.
      * @param hz The SPI bus frequency (defaults to 1MHz).
      */
-    SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype = SWITCH_NO, int hz = 1000000);
+    SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz = 1000000);
 
     /** Get the detected SD/MMC card type
      *
@@ -163,7 +165,7 @@ private:
     SPI m_Spi;
     DigitalOut m_Cs;
     InterruptIn m_Cd;
-    const int m_CD_ASSERT;
+    int m_CdAssert;
     const int m_FREQ;
     SDFileSystem::CardType m_CardType;
     bool m_Crc;

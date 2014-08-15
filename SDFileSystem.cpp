@@ -19,7 +19,7 @@
 #include "CRC7.h"
 #include "CRC16.h"
 
-SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz) : FATFileSystem(name), m_Spi(mosi, miso, sclk), m_Cs(cs, 1), m_Cd(cd), m_CD_ASSERT((int)cdtype), m_FREQ(hz)
+SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz) : FATFileSystem(name), m_Spi(mosi, miso, sclk), m_Cs(cs, 1), m_Cd(cd), m_FREQ(hz)
 {
     //Initialize the member variables
     m_CardType = CARD_NONE;
@@ -31,11 +31,23 @@ SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs,
     m_Spi.format(8, 0);
 
     //Configure the card detect pin
-    m_Cd.mode(PullUp);
-    if (cdtype == SWITCH_NO)
-        m_Cd.rise(this, &SDFileSystem::checkSocket);
-    else
+    if (cdtype == SWITCH_POS_NO) {
+        m_Cd.mode(PullDown);
+        m_CdAssert = 1;
         m_Cd.fall(this, &SDFileSystem::checkSocket);
+    } else if (cdtype == SWITCH_POS_NC) {
+        m_Cd.mode(PullDown);
+        m_CdAssert = 0;
+        m_Cd.rise(this, &SDFileSystem::checkSocket);
+    } else if (cdtype == SWITCH_NEG_NO) {
+        m_Cd.mode(PullUp);
+        m_CdAssert = 0;
+        m_Cd.rise(this, &SDFileSystem::checkSocket);
+    } else {
+        m_Cd.mode(PullUp);
+        m_CdAssert = 1;
+        m_Cd.fall(this, &SDFileSystem::checkSocket);
+    }
 }
 
 SDFileSystem::CardType SDFileSystem::card_type()
@@ -127,7 +139,7 @@ int SDFileSystem::disk_initialize()
     for (int i = 0; i < 10; i++)
         m_Spi.write(0xFF);
 
-    //Write CMD0(0x00000000) to reset the card
+    //Send CMD0(0x00000000) to reset the card
     if (commandTransaction(CMD0, 0x00000000) != 0x01) {
         //Initialization failed
         m_CardType = CARD_UNKNOWN;
@@ -143,7 +155,7 @@ int SDFileSystem::disk_initialize()
         }
     }
 
-    //Write CMD8(0x000001AA) to see if this is an SDCv2 card
+    //Send CMD8(0x000001AA) to see if this is an SDCv2 card
     if (commandTransaction(CMD8, 0x000001AA, &resp) == 0x01) {
         //This is an SDCv2 card, get the 32-bit return value and verify the voltage range/check pattern
         if ((resp & 0xFFF) != 0x1AA) {
@@ -181,6 +193,12 @@ int SDFileSystem::disk_initialize()
                 m_CardType = CARD_SDHC;
             else
                 m_CardType = CARD_SD;
+
+            //Increase the SPI frequency to full speed (up to 25MHz for SDCv2)
+            if (m_FREQ > 25000000)
+                m_Spi.frequency(25000000);
+            else
+                m_Spi.frequency(m_FREQ);
         } else {
             //Initialization failed
             m_CardType = CARD_UNKNOWN;
@@ -207,6 +225,12 @@ int SDFileSystem::disk_initialize()
         if (token == 0x00) {
             //This is an SDCv1 standard capacity card
             m_CardType = CARD_SD;
+
+            //Increase the SPI frequency to full speed (up to 25MHz for SDCv1)
+            if (m_FREQ > 25000000)
+                m_Spi.frequency(25000000);
+            else
+                m_Spi.frequency(m_FREQ);
         } else {
             //Try to initialize the card using CMD1(0x00100000) for 1 second
             for (int i = 0; i < 1000; i++) {
@@ -220,20 +244,17 @@ int SDFileSystem::disk_initialize()
             if (token == 0x00) {
                 //This is an MMCv3 card
                 m_CardType = CARD_MMC;
+
+                //Increase the SPI frequency to full speed (up to 20MHz for MMCv3)
+                if (m_FREQ > 20000000)
+                    m_Spi.frequency(20000000);
+                else
+                    m_Spi.frequency(m_FREQ);
             } else {
                 //Initialization failed
                 m_CardType = CARD_UNKNOWN;
                 return m_Status;
             }
-        }
-    }
-
-    //Send CMD16(0x00000200) to force the block size to 512B if necessary
-    if (m_CardType != CARD_SDHC) {
-        if (commandTransaction(CMD16, 0x00000200) != 0x00) {
-            //Initialization failed
-            m_CardType = CARD_UNKNOWN;
-            return m_Status;
         }
     }
 
@@ -246,16 +267,17 @@ int SDFileSystem::disk_initialize()
         }
     }
 
+    //Send CMD16(0x00000200) to force the block size to 512B if necessary
+    if (m_CardType != CARD_SDHC) {
+        if (commandTransaction(CMD16, 0x00000200) != 0x00) {
+            //Initialization failed
+            m_CardType = CARD_UNKNOWN;
+            return m_Status;
+        }
+    }
+
     //The card is now initialized
     m_Status &= ~STA_NOINIT;
-
-    //Increase the SPI frequency to full speed (limited to 20MHz for MMC, or 25MHz for SDC)
-    if (m_CardType == CARD_MMC && m_FREQ > 20000000)
-        m_Spi.frequency(20000000);
-    else if (m_FREQ > 25000000)
-        m_Spi.frequency(25000000);
-    else
-        m_Spi.frequency(m_FREQ);
 
     //Return the disk status
     return m_Status;
@@ -369,7 +391,7 @@ uint64_t SDFileSystem::disk_sectors()
 void SDFileSystem::checkSocket()
 {
     //Check if a card is in the socket
-    if (m_Cd == m_CD_ASSERT) {
+    if (m_Cd == m_CdAssert) {
         //The socket is occupied, clear the STA_NODISK flag
         m_Status &= ~STA_NODISK;
     } else {
