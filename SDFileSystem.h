@@ -130,6 +130,20 @@ public:
      */
     void large_frames(bool enabled);
 
+    /** Get whether or not write validation is enabled for data write operations
+     *
+     * @returns
+     *   'true' if data writes will be verified using CMD13,
+     *   'false' if data writes will not be verified.
+     */
+    bool write_validation();
+
+    /** Set whether or not write validation is enabled for data write operations
+     *
+     * @param enabled Whether or not write validation is enabled for data write operations.
+     */
+    void write_validation(bool enabled);
+
     virtual int unmount();
     virtual int disk_initialize();
     virtual int disk_status();
@@ -162,6 +176,7 @@ private:
     };
 
     //Member variables
+    Timer m_Timer;
     SPI m_Spi;
     DigitalOut m_Cs;
     InterruptIn m_Cd;
@@ -170,15 +185,17 @@ private:
     SDFileSystem::CardType m_CardType;
     bool m_Crc;
     bool m_LargeFrames;
+    bool m_WriteValidation;
     int m_Status;
 
     //Internal methods
+    void onCardRemoval();
     void checkSocket();
     bool waitReady(int timeout);
     bool select();
     void deselect();
     char commandTransaction(char cmd, unsigned int arg, unsigned int* resp = NULL);
-    char command(char cmd, unsigned int arg, unsigned int* resp = NULL);
+    char writeCommand(char cmd, unsigned int arg, unsigned int* resp = NULL);
     bool readData(char* buffer, int length);
     char writeData(const char* buffer, char token);
     bool readBlock(char* buffer, unsigned long long lba);

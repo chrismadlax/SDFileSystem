@@ -25,6 +25,7 @@ SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs,
     m_CardType = CARD_NONE;
     m_Crc = true;
     m_LargeFrames = false;
+    m_WriteValidation = true;
     m_Status = STA_NOINIT;
 
     //Configure the SPI bus
@@ -34,19 +35,19 @@ SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs,
     if (cdtype == SWITCH_POS_NO) {
         m_Cd.mode(PullDown);
         m_CdAssert = 1;
-        m_Cd.fall(this, &SDFileSystem::checkSocket);
+        m_Cd.fall(this, &SDFileSystem::onCardRemoval);
     } else if (cdtype == SWITCH_POS_NC) {
         m_Cd.mode(PullDown);
         m_CdAssert = 0;
-        m_Cd.rise(this, &SDFileSystem::checkSocket);
+        m_Cd.rise(this, &SDFileSystem::onCardRemoval);
     } else if (cdtype == SWITCH_NEG_NO) {
         m_Cd.mode(PullUp);
         m_CdAssert = 0;
-        m_Cd.rise(this, &SDFileSystem::checkSocket);
+        m_Cd.rise(this, &SDFileSystem::onCardRemoval);
     } else {
         m_Cd.mode(PullUp);
         m_CdAssert = 1;
-        m_Cd.fall(this, &SDFileSystem::checkSocket);
+        m_Cd.fall(this, &SDFileSystem::onCardRemoval);
     }
 }
 
@@ -102,6 +103,18 @@ void SDFileSystem::large_frames(bool enabled)
 {
     //Set whether or not 16-bit frames are enabled
     m_LargeFrames = enabled;
+}
+
+bool SDFileSystem::write_validation()
+{
+    //Return whether or not write validation is enabled
+    return m_WriteValidation;
+}
+
+void SDFileSystem::write_validation(bool enabled)
+{
+    //Set whether or not write validation is enabled
+    m_WriteValidation = enabled;
 }
 
 int SDFileSystem::unmount()
@@ -172,12 +185,12 @@ int SDFileSystem::disk_initialize()
         }
 
         //Send ACMD41(0x40100000) repeatedly for up to 1 second to initialize the card
-        for (int i = 0; i < 1000; i++) {
+        m_Timer.start();
+        do {
             token = commandTransaction(ACMD41, 0x40100000);
-            if (token != 0x01)
-                break;
-            wait_ms(1);
-        }
+        } while (token == 0x01 && m_Timer.read_ms() < 1000);
+        m_Timer.stop();
+        m_Timer.reset();
 
         //Check if the card initialized
         if (token != 0x00) {
@@ -214,12 +227,12 @@ int SDFileSystem::disk_initialize()
         }
 
         //Try to initialize the card using ACMD41(0x00100000) for 1 second
-        for (int i = 0; i < 1000; i++) {
+        m_Timer.start();
+        do {
             token = commandTransaction(ACMD41, 0x00100000);
-            if (token != 0x01)
-                break;
-            wait_ms(1);
-        }
+        } while (token == 0x01 && m_Timer.read_ms() < 1000);
+        m_Timer.stop();
+        m_Timer.reset();
 
         //Check if the card initialized
         if (token == 0x00) {
@@ -233,12 +246,12 @@ int SDFileSystem::disk_initialize()
                 m_Spi.frequency(m_FREQ);
         } else {
             //Try to initialize the card using CMD1(0x00100000) for 1 second
-            for (int i = 0; i < 1000; i++) {
+            m_Timer.start();
+            do {
                 token = commandTransaction(CMD1, 0x00100000);
-                if (token != 0x01)
-                    break;
-                wait_ms(1);
-            }
+            } while (token == 0x01 && m_Timer.read_ms() < 1000);
+            m_Timer.stop();
+            m_Timer.reset();
 
             //Check if the card initialized
             if (token == 0x00) {
@@ -300,15 +313,10 @@ int SDFileSystem::disk_read(uint8_t* buffer, uint64_t sector, uint8_t count)
 
     //Read a single block, or multiple blocks
     if (count > 1) {
-        if (readBlocks((char*)buffer, sector, count))
-            return RES_OK;
+        return readBlocks((char*)buffer, sector, count) ? RES_OK : RES_ERROR;
     } else {
-        if (readBlock((char*)buffer, sector))
-            return RES_OK;
+        return readBlock((char*)buffer, sector) ? RES_OK : RES_ERROR;
     }
-
-    //The read operation failed
-    return RES_ERROR;
 }
 
 int SDFileSystem::disk_write(const uint8_t* buffer, uint64_t sector, uint8_t count)
@@ -323,15 +331,10 @@ int SDFileSystem::disk_write(const uint8_t* buffer, uint64_t sector, uint8_t cou
 
     //Write a single block, or multiple blocks
     if (count > 1) {
-        if(writeBlocks((const char*)buffer, sector, count))
-            return RES_OK;
+        return writeBlocks((const char*)buffer, sector, count) ? RES_OK : RES_ERROR;
     } else {
-        if(writeBlock((const char*)buffer, sector))
-            return RES_OK;
+        return writeBlock((const char*)buffer, sector) ? RES_OK : RES_ERROR;
     }
-
-    //The write operation failed
-    return RES_ERROR;
 }
 
 int SDFileSystem::disk_sync()
@@ -354,11 +357,11 @@ uint64_t SDFileSystem::disk_sectors()
     //Try to read the CSD register up to 3 times
     for (int f = 0; f < 3; f++) {
         //Select the card, and wait for ready
-        if (!select())
+        if(!select())
             break;
 
         //Send CMD9(0x00000000) to read the CSD register
-        if (command(CMD9, 0x00000000) == 0x00) {
+        if (writeCommand(CMD9, 0x00000000) == 0x00) {
             //Read the 16B CSD data block
             char csd[16];
             bool success = readData(csd, 16);
@@ -388,7 +391,13 @@ uint64_t SDFileSystem::disk_sectors()
     return 0;
 }
 
-void SDFileSystem::checkSocket()
+void SDFileSystem::onCardRemoval()
+{
+    //Check the card socket
+    checkSocket();
+}
+
+inline void SDFileSystem::checkSocket()
 {
     //Check if a card is in the socket
     if (m_Cd == m_CdAssert) {
@@ -403,15 +412,18 @@ void SDFileSystem::checkSocket()
 
 inline bool SDFileSystem::waitReady(int timeout)
 {
-    //Wait for the specified timeout for the card to become ready
-    for (int i = 0; i < timeout; i++) {
-        if (m_Spi.write(0xFF) == 0xFF)
-            return true;
-        wait_ms(1);
-    }
+    char resp;
 
-    //We timed out
-    return false;
+    //Keep sending dummy clocks with DI held high until the card releases the DO line
+    m_Timer.start();
+    do {
+        resp = m_Spi.write(0xFF);
+    } while (resp == 0x00 && m_Timer.read_ms() < timeout);
+    m_Timer.stop();
+    m_Timer.reset();
+
+    //Return success/failure
+    return (resp > 0x00);
 }
 
 inline bool SDFileSystem::select()
@@ -444,31 +456,33 @@ inline void SDFileSystem::deselect()
 inline char SDFileSystem::commandTransaction(char cmd, unsigned int arg, unsigned int* resp)
 {
     //Select the card, and wait for ready
-    if (!select())
+    if(!select())
         return 0xFF;
 
     //Perform the command transaction
-    char token = command(cmd, arg, resp);
+    char token = writeCommand(cmd, arg, resp);
 
     //Deselect the card, and return the R1 response token
     deselect();
     return token;
 }
 
-char SDFileSystem::command(char cmd, unsigned int arg, unsigned int* resp)
+char SDFileSystem::writeCommand(char cmd, unsigned int arg, unsigned int* resp)
 {
     char token;
 
     //Try to send the command up to 3 times
     for (int f = 0; f < 3; f++) {
         //Send CMD55(0x00000000) prior to an application specific command
-        if (cmd == ACMD23 || cmd == ACMD41 || cmd == ACMD42) {
-            token = command(CMD55, 0x00000000);
+        if (cmd == ACMD22 || cmd == ACMD23 || cmd == ACMD41 || cmd == ACMD42) {
+            token = writeCommand(CMD55, 0x00000000);
             if (token > 0x01)
                 return token;
 
-            //Some cards need a dummy byte between CMD55 and an ACMD
-            m_Spi.write(0xFF);
+            //Deselect and reselect the card between CMD55 and an ACMD
+            deselect();
+            if(!select())
+                return 0xFF;
         }
 
         //Prepare the command packet
@@ -535,15 +549,15 @@ bool SDFileSystem::readData(char* buffer, int length)
     char token;
     unsigned short crc;
 
-    //Wait for up to 200ms for the start block token to arrive
-    for (int i = 0; i < 200; i++) {
+    //Wait for up to 500ms for a token to arrive
+    m_Timer.start();
+    do {
         token = m_Spi.write(0xFF);
-        if (token != 0xFF)
-            break;
-        wait_ms(1);
-    }
+    } while (token == 0xFF && m_Timer.read_ms() < 500);
+    m_Timer.stop();
+    m_Timer.reset();
 
-    //Make sure the token is valid
+    //Check if a valid start block token was received
     if (token != 0xFE)
         return false;
 
@@ -584,8 +598,9 @@ char SDFileSystem::writeData(const char* buffer, char token)
     //Calculate the CRC16 checksum for the data block (if enabled)
     unsigned short crc = (m_Crc) ? CRC16(buffer, 512) : 0xFFFF;
 
-    //Wait for the card to become ready
-    while (!m_Spi.write(0xFF));
+    //Wait for up to 500ms for the card to become ready
+    if (!waitReady(500))
+        return false;
 
     //Send the start block token
     m_Spi.write(token);
@@ -623,11 +638,11 @@ inline bool SDFileSystem::readBlock(char* buffer, unsigned long long lba)
     //Try to read the block up to 3 times
     for (int f = 0; f < 3; f++) {
         //Select the card, and wait for ready
-        if (!select())
+        if(!select())
             break;
 
         //Send CMD17(block) to read a single block
-        if (command(CMD17, (m_CardType == CARD_SDHC) ? lba : lba * 512) == 0x00) {
+        if (writeCommand(CMD17, (m_CardType == CARD_SDHC) ? lba : lba << 9) == 0x00) {
             //Try to read the block, and deselect the card
             bool success = readData(buffer, 512);
             deselect();
@@ -651,14 +666,14 @@ inline bool SDFileSystem::readBlocks(char* buffer, unsigned long long lba, int c
     //Try to read each block up to 3 times
     for (int f = 0; f < 3;) {
         //Select the card, and wait for ready
-        if (!select())
+        if(!select())
             break;
 
         //Send CMD18(block) to read multiple blocks
-        if (command(CMD18, (m_CardType == CARD_SDHC) ? lba : lba * 512) == 0x00) {
+        if (writeCommand(CMD18, (m_CardType == CARD_SDHC) ? lba : lba << 9) == 0x00) {
             //Try to read all of the data blocks
             do {
-                //Read the next block and break on errors
+                //Read the next block, and break on errors
                 if (!readData(buffer, 512)) {
                     f++;
                     break;
@@ -671,19 +686,13 @@ inline bool SDFileSystem::readBlocks(char* buffer, unsigned long long lba, int c
             } while (--count);
 
             //Send CMD12(0x00000000) to stop the transmission
-            if (command(CMD12, 0x00000000) != 0x00) {
+            if (writeCommand(CMD12, 0x00000000) != 0x00) {
                 //The command failed, get out
                 break;
             }
 
-            //Only wait for CMD12 if the read was unsuccessful
-            if (count)
-                while (!m_Spi.write(0xFF));
-
-            //Deselect the card
+            //Deselect the card, and return if successful
             deselect();
-
-            //Return if successful
             if (count == 0)
                 return true;
         } else {
@@ -702,11 +711,11 @@ inline bool SDFileSystem::writeBlock(const char* buffer, unsigned long long lba)
     //Try to write the block up to 3 times
     for (int f = 0; f < 3; f++) {
         //Select the card, and wait for ready
-        if (!select())
+        if(!select())
             break;
 
         //Send CMD24(block) to write a single block
-        if (command(CMD24, (m_CardType == CARD_SDHC) ? lba : lba * 512) == 0x00) {
+        if (writeCommand(CMD24, (m_CardType == CARD_SDHC) ? lba : lba << 9) == 0x00) {
             //Try to write the block, and deselect the card
             char token = writeData(buffer, 0xFE);
             deselect();
@@ -720,11 +729,13 @@ inline bool SDFileSystem::writeBlock(const char* buffer, unsigned long long lba)
                 break;
             }
 
-            //Send CMD13(0x00000000) to verify that the programming was successful
-            unsigned int resp;
-            if (commandTransaction(CMD13, 0x00000000, &resp) != 0x00 || resp != 0x00) {
-                //Some manner of unrecoverable write error occured during programming, get out
-                break;
+            //Send CMD13(0x00000000) to verify that the programming was successful if enabled
+            if (m_WriteValidation) {
+                unsigned int resp;
+                if (commandTransaction(CMD13, 0x00000000, &resp) != 0x00 || resp != 0x00) {
+                    //Some manner of unrecoverable write error occured during programming, get out
+                    break;
+                }
             }
 
             //The data was written successfully
@@ -758,11 +769,11 @@ inline bool SDFileSystem::writeBlocks(const char* buffer, unsigned long long lba
         }
 
         //Select the card, and wait for ready
-        if (!select())
+        if(!select())
             break;
 
         //Send CMD25(block) to write multiple blocks
-        if (command(CMD25, (m_CardType == CARD_SDHC) ? currentLba : currentLba * 512) == 0x00) {
+        if (writeCommand(CMD25, (m_CardType == CARD_SDHC) ? currentLba : currentLba << 9) == 0x00) {
             //Try to write all of the data blocks
             do {
                 //Write the next block and break on errors
@@ -777,45 +788,44 @@ inline bool SDFileSystem::writeBlocks(const char* buffer, unsigned long long lba
                 f = 0;
             } while (--currentCount);
 
-            //Wait for the card to finish processing the last block
-            while (!m_Spi.write(0xFF));
+            //Wait for up to 500ms for the card to finish processing the last block
+            if (!waitReady(500))
+                break;
 
             //Finalize the transmission
             if (currentCount == 0) {
-                //Send the stop tran token
+                //Send the stop tran token, and deselect the card
                 m_Spi.write(0xFD);
-
-                //Wait for the programming to complete, and deselect the card
-                while (!m_Spi.write(0xFF));
                 deselect();
 
-                //Send CMD13(0x00000000) to verify that the programming was successful
-                unsigned int resp;
-                if (commandTransaction(CMD13, 0x00000000, &resp) != 0x00 || resp != 0x00) {
-                    //Some manner of unrecoverable write error occured during programming, get out
-                    break;
+                //Send CMD13(0x00000000) to verify that the programming was successful if enabled
+                if (m_WriteValidation) {
+                    unsigned int resp;
+                    if (commandTransaction(CMD13, 0x00000000, &resp) != 0x00 || resp != 0x00) {
+                        //Some manner of unrecoverable write error occured during programming, get out
+                        break;
+                    }
                 }
 
                 //The data was written successfully
                 return true;
             } else {
                 //Send CMD12(0x00000000) to abort the transmission
-                if (command(CMD12, 0x00000000) != 0x00) {
+                if (writeCommand(CMD12, 0x00000000) != 0x00) {
                     //The command failed, get out
                     break;
                 }
 
-                //Wait for CMD12 to complete, and deselect the card
-                while (!m_Spi.write(0xFF));
+                //Deselect the card
                 deselect();
 
                 //Check the error token
                 if (token == 0x0A) {
                     //Determine the number of well written blocks if possible
                     unsigned int writtenBlocks = 0;
-                    if (m_CardType != CARD_MMC) {
+                    if (m_CardType != CARD_MMC && select()) {
                         //Send ACMD22(0x00000000) to get the number of well written blocks
-                        if (commandTransaction(ACMD22, 0x00000000) == 0x00) {
+                        if (writeCommand(ACMD22, 0x00000000) == 0x00) {
                             //Read the data
                             char acmdData[4];
                             if (readData(acmdData, 4)) {
@@ -826,10 +836,11 @@ inline bool SDFileSystem::writeBlocks(const char* buffer, unsigned long long lba
                                 writtenBlocks |= acmdData[3];
                             }
                         }
+                        deselect();
                     }
 
                     //Roll back the variables based on the number of well written blocks
-                    currentBuffer = buffer + (writtenBlocks * 512);
+                    currentBuffer = buffer + (writtenBlocks << 9);
                     currentLba = lba + writtenBlocks;
                     currentCount = count - writtenBlocks;
 
