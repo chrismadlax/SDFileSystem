@@ -15,6 +15,7 @@
  */
 
 #include "SDFileSystem.h"
+#include "pinmap.h"
 #include "diskio.h"
 #include "CRC7.h"
 #include "CRC16.h"
@@ -27,6 +28,9 @@ SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs,
     m_LargeFrames = false;
     m_WriteValidation = true;
     m_Status = STA_NOINIT;
+
+    //Enable the internal pull-up resistor on MISO
+    pin_mode(miso, PullUp);
 
     //Configure the SPI bus
     m_Spi.format(8, 0);
