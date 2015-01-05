@@ -30,10 +30,13 @@
  * #include "SDFileSystem.h"
  *
  * //Create an SDFileSystem object
- * SDFileSystem sd(p5, p6, p7, p20, "sd", p22, SDFileSystem::SWITCH_NEG_NO);
+ * SDFileSystem sd(p5, p6, p7, p20, "sd");
  *
  * int main()
  * {
+ *     //Mount the filesystem
+ *     sd.mount();
+ *
  *     //Perform a write test
  *     printf("\nWriting to SD card...");
  *     FILE *fp = fopen("/sd/sdtest.txt", "w");
@@ -58,6 +61,9 @@
  *     } else {
  *         printf("failed!\n");
  *     }
+ *
+ *     //Unmount the filesystem
+ *     sd.unmount();
  * }
  * @endcode
  */
@@ -67,6 +73,7 @@ public:
     /** Represents the different card detect switch types
      */
     enum SwitchType {
+        SWITCH_NONE,    /**< No card detect switch (assumes socket is always occupied) */
         SWITCH_POS_NO,  /**< Switch shorts to VDD when the socket is occupied (positive logic, normally open) */
         SWITCH_POS_NC,  /**< Switch shorts to VDD when the socket is empty (positive logic, normally closed) */
         SWITCH_NEG_NO,  /**< Switch shorts to GND when the socket is occupied (negative logic, normally open) */
@@ -94,7 +101,7 @@ public:
      * @param cdtype The type of card detect switch.
      * @param hz The SPI bus frequency (defaults to 1MHz).
      */
-    SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz = 1000000);
+    SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd = NC, SwitchType cdtype = SWITCH_NONE, int hz = 1000000);
 
     /** Get the detected SD/MMC card type
      *

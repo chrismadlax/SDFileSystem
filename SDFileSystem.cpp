@@ -48,16 +48,18 @@ SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs,
         m_Cd.mode(PullUp);
         m_CdAssert = 0;
         m_Cd.rise(this, &SDFileSystem::onCardRemoval);
-    } else {
+    } else if (cdtype == SWITCH_NEG_NC) {
         m_Cd.mode(PullUp);
         m_CdAssert = 1;
         m_Cd.fall(this, &SDFileSystem::onCardRemoval);
+    } else {
+        m_CdAssert = -1;
     }
 }
 
 SDFileSystem::CardType SDFileSystem::card_type()
 {
-    //Check the card socket
+    //Check if there's a card in the socket
     checkSocket();
 
     //If a card is present but not initialized, initialize it
@@ -76,7 +78,7 @@ bool SDFileSystem::crc()
 
 void SDFileSystem::crc(bool enabled)
 {
-    //Check the card socket
+    //Check if there's a card in the socket
     checkSocket();
 
     //Just update the member variable if the card isn't initialized
@@ -397,14 +399,14 @@ uint64_t SDFileSystem::disk_sectors()
 
 void SDFileSystem::onCardRemoval()
 {
-    //Check the card socket
+    //Check if there's a card in the socket
     checkSocket();
 }
 
 inline void SDFileSystem::checkSocket()
 {
-    //Check if a card is in the socket
-    if (m_Cd == m_CdAssert) {
+    //Use the card detect switch (if available) to determine if the socket is occupied
+    if (m_CdAssert == -1 || m_Cd == m_CdAssert) {
         //The socket is occupied, clear the STA_NODISK flag
         m_Status &= ~STA_NODISK;
     } else {
