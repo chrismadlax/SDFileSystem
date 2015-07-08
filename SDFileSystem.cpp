@@ -376,11 +376,11 @@ uint64_t SDFileSystem::disk_sectors()
                 //Calculate the sector count based on the card type
                 if ((csd[0] >> 6) == 0x01) {
                     //Calculate the sector count for a high capacity card
-                    uint64_t size = (((csd[7] & 0x3F) << 16) | (csd[8] << 8) | csd[9]) + 1;
+                    unsigned int size = (((csd[7] & 0x3F) << 16) | (csd[8] << 8) | csd[9]) + 1;
                     return size << 10;
                 } else {
                     //Calculate the sector count for a standard capacity card
-                    uint64_t size = (((csd[6] & 0x03) << 10) | (csd[7] << 2) | ((csd[8] & 0xC0) >> 6)) + 1;
+                    unsigned int size = (((csd[6] & 0x03) << 10) | (csd[7] << 2) | ((csd[8] & 0xC0) >> 6)) + 1;
                     size <<= ((((csd[9] & 0x03) << 1) | ((csd[10] & 0x80) >> 7)) + 2);
                     size <<= (csd[5] & 0x0F);
                     return size >> 9;
@@ -639,7 +639,7 @@ char SDFileSystem::writeData(const char* buffer, char token)
     return (m_Spi.write(0xFF) & 0x1F);
 }
 
-inline bool SDFileSystem::readBlock(char* buffer, unsigned long long lba)
+inline bool SDFileSystem::readBlock(char* buffer, unsigned int lba)
 {
     //Try to read the block up to 3 times
     for (int f = 0; f < 3; f++) {
@@ -667,7 +667,7 @@ inline bool SDFileSystem::readBlock(char* buffer, unsigned long long lba)
     return false;
 }
 
-inline bool SDFileSystem::readBlocks(char* buffer, unsigned long long lba, int count)
+inline bool SDFileSystem::readBlocks(char* buffer, unsigned int lba, unsigned int count)
 {
     //Try to read each block up to 3 times
     for (int f = 0; f < 3;) {
@@ -712,7 +712,7 @@ inline bool SDFileSystem::readBlocks(char* buffer, unsigned long long lba, int c
     return false;
 }
 
-inline bool SDFileSystem::writeBlock(const char* buffer, unsigned long long lba)
+inline bool SDFileSystem::writeBlock(const char* buffer, unsigned int lba)
 {
     //Try to write the block up to 3 times
     for (int f = 0; f < 3; f++) {
@@ -757,11 +757,11 @@ inline bool SDFileSystem::writeBlock(const char* buffer, unsigned long long lba)
     return false;
 }
 
-inline bool SDFileSystem::writeBlocks(const char* buffer, unsigned long long lba, int count)
+inline bool SDFileSystem::writeBlocks(const char* buffer, unsigned int lba, unsigned int count)
 {
     char token;
     const char* currentBuffer = buffer;
-    unsigned long long currentLba = lba;
+    unsigned int currentLba = lba;
     int currentCount = count;
 
     //Try to write each block up to 3 times

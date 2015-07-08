@@ -205,10 +205,10 @@ private:
     char writeCommand(char cmd, unsigned int arg, unsigned int* resp = NULL);
     bool readData(char* buffer, int length);
     char writeData(const char* buffer, char token);
-    bool readBlock(char* buffer, unsigned long long lba);
-    bool readBlocks(char* buffer, unsigned long long lba, int count);
-    bool writeBlock(const char* buffer, unsigned long long lba);
-    bool writeBlocks(const char* buffer, unsigned long long lba, int count);
+    bool readBlock(char* buffer, unsigned int lba);
+    bool readBlocks(char* buffer, unsigned int lba, unsigned int count);
+    bool writeBlock(const char* buffer, unsigned int lba);
+    bool writeBlocks(const char* buffer, unsigned int lba, unsigned int count);
 };
 
 #endif
