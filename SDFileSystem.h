@@ -1,5 +1,5 @@
 /* SD/MMC File System Library
- * Copyright (c) 2014 Neil Thiessen
+ * Copyright (c) 2015 Neil Thiessen
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@
 
 #include "mbed.h"
 #include "FATFileSystem.h"
-#include <stdint.h>
 
 /** SDFileSystem class.
  *  Used for creating a virtual file system for accessing SD/MMC cards via SPI.

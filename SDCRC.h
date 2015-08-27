@@ -1,5 +1,5 @@
 /* SD/MMC File System Library
- * Copyright (c) 2014 Neil Thiessen
+ * Copyright (c) 2015 Neil Thiessen
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef CRC7_H
-#define CRC7_H
+#ifndef SD_CRC_H
+#define SD_CRC_H
 
 #include "mbed.h"
 
-char CRC7(const char* data, int length);
+namespace SDCRC
+{
+
+char crc7(const char* data, int length);
+unsigned short crc16(const char* data, int length);
+
+}
 
 #endif

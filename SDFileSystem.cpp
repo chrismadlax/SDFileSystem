@@ -1,5 +1,5 @@
 /* SD/MMC File System Library
- * Copyright (c) 2014 Neil Thiessen
+ * Copyright (c) 2015 Neil Thiessen
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,9 @@
  */
 
 #include "SDFileSystem.h"
-#include "pinmap.h"
 #include "diskio.h"
-#include "CRC7.h"
-#include "CRC16.h"
+#include "pinmap.h"
+#include "SDCRC.h"
 
 SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz) : FATFileSystem(name), m_Spi(mosi, miso, sclk), m_Cs(cs, 1), m_Cd(cd), m_FREQ(hz)
 {
@@ -62,9 +61,14 @@ SDFileSystem::CardType SDFileSystem::card_type()
     //Check if there's a card in the socket
     checkSocket();
 
-    //If a card is present but not initialized, initialize it
-    if (!(m_Status & STA_NODISK) && (m_Status & STA_NOINIT))
+    //Check if a card is present, but not initialized
+    if (!(m_Status & STA_NODISK) && (m_Status & STA_NOINIT)) {
+        //Initialize the card in order to determine the card type
         disk_initialize();
+
+        //Change the status back to uninitialized so that FatFs will handle the card change properly
+        m_Status |= STA_NOINIT;
+    }
 
     //Return the card type
     return m_CardType;
@@ -407,7 +411,7 @@ inline void SDFileSystem::checkSocket()
 {
     //Use the card detect switch (if available) to determine if the socket is occupied
     if (m_CdAssert == -1 || m_Cd == m_CdAssert) {
-        //The socket is occupied, clear the STA_NODISK flag
+        //The socket is occupied
         m_Status &= ~STA_NODISK;
     } else {
         //The socket is empty
@@ -499,7 +503,7 @@ char SDFileSystem::writeCommand(char cmd, unsigned int arg, unsigned int* resp)
         cmdPacket[3] = arg >> 8;
         cmdPacket[4] = arg;
         if (m_Crc || cmd == CMD0 || cmd == CMD8)
-            cmdPacket[5] = (CRC7(cmdPacket, 5) << 1) | 0x01;
+            cmdPacket[5] = (SDCRC::crc7(cmdPacket, 5) << 1) | 0x01;
         else
             cmdPacket[5] = 0x01;
 
@@ -596,13 +600,13 @@ bool SDFileSystem::readData(char* buffer, int length)
     }
 
     //Return the validity of the CRC16 checksum (if enabled)
-    return (!m_Crc || crc == CRC16(buffer, length));
+    return (!m_Crc || crc == SDCRC::crc16(buffer, length));
 }
 
 char SDFileSystem::writeData(const char* buffer, char token)
 {
     //Calculate the CRC16 checksum for the data block (if enabled)
-    unsigned short crc = (m_Crc) ? CRC16(buffer, 512) : 0xFFFF;
+    unsigned short crc = (m_Crc) ? SDCRC::crc16(buffer, 512) : 0xFFFF;
 
     //Wait for up to 500ms for the card to become ready
     if (!waitReady(500))
