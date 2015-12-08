@@ -102,9 +102,19 @@ public:
      */
     SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd = NC, SwitchType cdtype = SWITCH_NONE, int hz = 1000000);
 
+    /** Determine whether or not a card is present
+     *
+     * @returns
+     *   'true' if a card is present,
+     *   'false' if no card is present.
+     */
+    bool card_present();
+
     /** Get the detected SD/MMC card type
      *
      * @returns The detected card type as a CardType enum.
+     *
+     * @note Valid after the filesystem has been mounted.
      */
     SDFileSystem::CardType card_type();
 

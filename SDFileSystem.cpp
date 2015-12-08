@@ -56,19 +56,19 @@ SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs,
     }
 }
 
-SDFileSystem::CardType SDFileSystem::card_type()
+bool SDFileSystem::card_present()
 {
-    //Check if there's a card in the socket
+    //Check the card socket
     checkSocket();
 
-    //Check if a card is present, but not initialized
-    if (!(m_Status & STA_NODISK) && (m_Status & STA_NOINIT)) {
-        //Initialize the card in order to determine the card type
-        disk_initialize();
+    //Return whether or not a card is present
+    return !(m_Status & STA_NODISK);
+}
 
-        //Change the status back to uninitialized so that FatFs will handle the card change properly
-        m_Status |= STA_NOINIT;
-    }
+SDFileSystem::CardType SDFileSystem::card_type()
+{
+    //Check the card socket
+    checkSocket();
 
     //Return the card type
     return m_CardType;
@@ -82,7 +82,7 @@ bool SDFileSystem::crc()
 
 void SDFileSystem::crc(bool enabled)
 {
-    //Check if there's a card in the socket
+    //Check the card socket
     checkSocket();
 
     //Just update the member variable if the card isn't initialized
@@ -132,9 +132,9 @@ int SDFileSystem::unmount()
     //Unmount the filesystem
     FATFileSystem::unmount();
 
-    //Change the status to not initialized, and the card type to none
+    //Change the status to not initialized, and the card type to unknown
     m_Status |= STA_NOINIT;
-    m_CardType = CARD_NONE;
+    m_CardType = CARD_UNKNOWN;
 
     //Always succeeds
     return 0;
@@ -308,7 +308,7 @@ int SDFileSystem::disk_initialize()
 
 int SDFileSystem::disk_status()
 {
-    //Check if there's a card in the socket
+    //Check the card socket
     checkSocket();
 
     //Return the disk status
@@ -403,20 +403,27 @@ uint64_t SDFileSystem::disk_sectors()
 
 void SDFileSystem::onCardRemoval()
 {
-    //Check if there's a card in the socket
+    //Check the card socket
     checkSocket();
 }
 
 inline void SDFileSystem::checkSocket()
 {
     //Use the card detect switch (if available) to determine if the socket is occupied
-    if (m_CdAssert == -1 || m_Cd == m_CdAssert) {
-        //The socket is occupied
-        m_Status &= ~STA_NODISK;
-    } else {
-        //The socket is empty
-        m_Status |= (STA_NODISK | STA_NOINIT);
-        m_CardType = CARD_NONE;
+    if (m_CdAssert != -1) {
+        if (m_Status & STA_NODISK) {
+            if (m_Cd == m_CdAssert) {
+                //The socket is now occupied
+                m_Status &= ~STA_NODISK;
+                m_CardType = CARD_UNKNOWN;
+            }
+        } else {
+            if (m_Cd != m_CdAssert) {
+                //The socket is now empty
+                m_Status |= (STA_NODISK | STA_NOINIT);
+                m_CardType = CARD_NONE;
+            }
+        }
     }
 }
 
