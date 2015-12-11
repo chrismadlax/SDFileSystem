@@ -163,10 +163,10 @@ public:
     virtual int unmount();
     virtual int disk_initialize();
     virtual int disk_status();
-    virtual int disk_read(uint8_t* buffer, uint64_t sector, uint8_t count);
-    virtual int disk_write(const uint8_t* buffer, uint64_t sector, uint8_t count);
+    virtual int disk_read(uint8_t* buffer, uint32_t sector, uint32_t count);
+    virtual int disk_write(const uint8_t* buffer, uint32_t sector, uint32_t count);
     virtual int disk_sync();
-    virtual uint64_t disk_sectors();
+    virtual uint32_t disk_sectors();
 
 private:
     //Commands

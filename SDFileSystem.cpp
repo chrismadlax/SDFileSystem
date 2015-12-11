@@ -315,7 +315,7 @@ int SDFileSystem::disk_status()
     return m_Status;
 }
 
-int SDFileSystem::disk_read(uint8_t* buffer, uint64_t sector, uint8_t count)
+int SDFileSystem::disk_read(uint8_t* buffer, uint32_t sector, uint32_t count)
 {
     //Make sure the card is initialized before proceeding
     if (m_Status & STA_NOINIT)
@@ -329,7 +329,7 @@ int SDFileSystem::disk_read(uint8_t* buffer, uint64_t sector, uint8_t count)
     }
 }
 
-int SDFileSystem::disk_write(const uint8_t* buffer, uint64_t sector, uint8_t count)
+int SDFileSystem::disk_write(const uint8_t* buffer, uint32_t sector, uint32_t count)
 {
     //Make sure the card is initialized before proceeding
     if (m_Status & STA_NOINIT)
@@ -358,7 +358,7 @@ int SDFileSystem::disk_sync()
     }
 }
 
-uint64_t SDFileSystem::disk_sectors()
+uint32_t SDFileSystem::disk_sectors()
 {
     //Make sure the card is initialized before proceeding
     if (m_Status & STA_NOINIT)
