@@ -1,5 +1,5 @@
 /* SD/MMC File System Library
- * Copyright (c) 2015 Neil Thiessen
+ * Copyright (c) 2016 Neil Thiessen
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,12 @@
 #include "pinmap.h"
 #include "SDCRC.h"
 
-SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz) : FATFileSystem(name), m_Spi(mosi, miso, sclk), m_Cs(cs, 1), m_Cd(cd), m_FREQ(hz)
+SDFileSystem::SDFileSystem(PinName mosi, PinName miso, PinName sclk, PinName cs, const char* name, PinName cd, SwitchType cdtype, int hz)
+    : FATFileSystem(name),
+      m_Spi(mosi, miso, sclk),
+      m_Cs(cs, 1),
+      m_Cd(cd),
+      m_FREQ(hz)
 {
     //Initialize the member variables
     m_CardType = CARD_NONE;
@@ -194,13 +199,13 @@ int SDFileSystem::disk_initialize()
             return m_Status;
         }
 
-        //Send ACMD41(0x40100000) repeatedly for up to 1 second to initialize the card
-        m_Timer.start();
-        do {
+        //Try to initialize the card using ACMD41(0x00100000)
+        for (int i = 0; i < 1000; i++) {
             token = commandTransaction(ACMD41, 0x40100000);
-        } while (token == 0x01 && m_Timer.read_ms() < 1000);
-        m_Timer.stop();
-        m_Timer.reset();
+            if (token != 0x01) {
+                break;
+            }
+        }
 
         //Check if the card initialized
         if (token != 0x00) {
@@ -236,13 +241,13 @@ int SDFileSystem::disk_initialize()
             return m_Status;
         }
 
-        //Try to initialize the card using ACMD41(0x00100000) for 1 second
-        m_Timer.start();
-        do {
-            token = commandTransaction(ACMD41, 0x00100000);
-        } while (token == 0x01 && m_Timer.read_ms() < 1000);
-        m_Timer.stop();
-        m_Timer.reset();
+        //Try to initialize the card using ACMD41(0x00100000)
+        for (int i = 0; i < 1000; i++) {
+            token = commandTransaction(ACMD41, 0x40100000);
+            if (token != 0x01) {
+                break;
+            }
+        }
 
         //Check if the card initialized
         if (token == 0x00) {
@@ -255,13 +260,13 @@ int SDFileSystem::disk_initialize()
             else
                 m_Spi.frequency(m_FREQ);
         } else {
-            //Try to initialize the card using CMD1(0x00100000) for 1 second
-            m_Timer.start();
-            do {
+            //Try to initialize the card using CMD1(0x00100000)
+            for (int i = 0; i < 1000; i++) {
                 token = commandTransaction(CMD1, 0x00100000);
-            } while (token == 0x01 && m_Timer.read_ms() < 1000);
-            m_Timer.stop();
-            m_Timer.reset();
+                if (token != 0x01) {
+                    break;
+                }
+            }
 
             //Check if the card initialized
             if (token == 0x00) {
