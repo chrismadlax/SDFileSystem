@@ -222,11 +222,20 @@ int SDFileSystem::disk_initialize()
             else
                 m_CardType = CARD_SD;
 
-            //Increase the SPI frequency to full speed (up to 25MHz for SDCv2)
-            if (m_FREQ > 25000000)
-                m_Spi.frequency(25000000);
-            else
+            //Increase the SPI frequency to full speed (up to 50MHz for SDCv2)
+            if (m_FREQ > 25000000) {
+                if (enableHighSpeedMode()) {
+                    if (m_FREQ > 50000000) {
+                        m_Spi.frequency(50000000);
+                    } else {
+                        m_Spi.frequency(m_FREQ);
+                    }
+                } else {
+                    m_Spi.frequency(25000000);
+                }
+            } else {
                 m_Spi.frequency(m_FREQ);
+            }
         } else {
             //Initialization failed
             m_CardType = CARD_UNKNOWN;
@@ -880,6 +889,35 @@ inline bool SDFileSystem::writeBlocks(const char* buffer, unsigned int lba, unsi
     }
 
     //The multiple block write failed
+    deselect();
+    return false;
+}
+
+bool SDFileSystem::enableHighSpeedMode()
+{
+    //Try to issue CMD6 up to 3 times
+    for (int f = 0; f < 3; f++) {
+        //Select the card, and wait for ready
+        if(!select())
+            break;
+
+        //Send CMD6(0x80FFFFF1) to change the access mode to high speed
+        if (writeCommand(CMD6, 0x80FFFFF1) == 0x00) {
+            //Read the 64B status data block
+            char status[64];
+            bool success = readData(status, 64);
+            deselect();
+            if (success) {
+                //Return whether or not the operation was successful
+                return ((status[16] & 0x0F) == 0x1);
+            }
+        } else {
+            //The command failed, get out
+            break;
+        }
+    }
+
+    //The operation failed 3 times
     deselect();
     return false;
 }

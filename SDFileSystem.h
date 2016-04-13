@@ -173,6 +173,7 @@ private:
     enum Command {
         CMD0 = (0x40 | 0),      /**< GO_IDLE_STATE */
         CMD1 = (0x40 | 1),      /**< SEND_OP_COND */
+        CMD6 = (0x40 | 6),      /**< SWITCH_FUNC */
         CMD8 = (0x40 | 8),      /**< SEND_IF_COND */
         CMD9 = (0x40 | 9),      /**< SEND_CSD */
         CMD12 = (0x40 | 12),    /**< STOP_TRANSMISSION */
@@ -218,6 +219,7 @@ private:
     bool readBlocks(char* buffer, unsigned int lba, unsigned int count);
     bool writeBlock(const char* buffer, unsigned int lba);
     bool writeBlocks(const char* buffer, unsigned int lba, unsigned int count);
+    bool enableHighSpeedMode();
 };
 
 #endif
