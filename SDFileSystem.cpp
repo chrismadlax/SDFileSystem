@@ -163,13 +163,23 @@ int SDFileSystem::disk_initialize()
     //Set the SPI frequency to 400kHz for initialization
     m_Spi.frequency(400000);
 
-    //Send 80 dummy clocks with /CS deasserted and DI held high
-    m_Cs = 1;
-    for (int i = 0; i < 10; i++)
-        m_Spi.write(0xFF);
+    //Try to reset the card up to 3 times
+    for (int f = 0; f < 3; f++) {
+        //Send 80 dummy clocks with /CS deasserted and DI held high
+        m_Cs = 1;
+        for (int i = 0; i < 10; i++) {
+            m_Spi.write(0xFF);
+        }
 
-    //Send CMD0(0x00000000) to reset the card
-    if (commandTransaction(CMD0, 0x00000000) != 0x01) {
+        //Send CMD0(0x00000000) to reset the card
+        token = commandTransaction(CMD0, 0x00000000);
+        if (token == 0x01) {
+            break;
+        }
+    }
+
+    //Check if the card reset
+    if (token != 0x01) {
         //Initialization failed
         m_CardType = CARD_UNKNOWN;
         return m_Status;
